@@ -410,7 +410,12 @@ class Netfilter:
 
     def reset(self):
         self.flushtables()
-        os.system("iptables -P OUTPUT ACCEPT")
+        if cmd("systemctl is-enabled netfilter-persistent").rstrip() == "enabled":
+            os.system("systemctl restart netfilter-persistent")
+        elif cmd("systemctl is-enabled iptables").rstrip() == "enabled":
+            os.system("systemctl restart iptables")
+        else:
+            os.system("iptables -P OUTPUT ACCEPT")
         os.system("ebtables -P OUTPUT ACCEPT")
         os.system("arptables -P OUTPUT ACCEPT")
 
