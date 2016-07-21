@@ -491,6 +491,7 @@ class Bridge:
     clientsiteint = None
 
     def __init__(self, bridgename, interfaces, subnet):
+        os.system("modprobe br_netfilter")
         self.bridgename = bridgename
         self.interfaces = interfaces
         self.subnet = subnet
