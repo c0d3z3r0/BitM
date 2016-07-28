@@ -407,6 +407,15 @@ class Netfilter:
         os.system("ebtables -F")
         os.system("ebtables -t nat -F")
         os.system("arptables -F")
+        os.system("iptables -P INPUT ACCEPT")
+        os.system("iptables -P FORWARD ACCEPT")
+        os.system("iptables -P OUTPUT ACCEPT")
+        os.system("ebtables -P INPUT ACCEPT")
+        os.system("ebtables -P FORWARD ACCEPT")
+        os.system("ebtables -P OUTPUT ACCEPT")
+        os.system("arptables -P INPUT ACCEPT")
+        os.system("arptables -P FORWARD ACCEPT")
+        os.system("arptables -P OUTPUT ACCEPT")
 
     def reset(self):
         self.flushtables()
