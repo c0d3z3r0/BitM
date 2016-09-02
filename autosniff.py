@@ -44,6 +44,7 @@ class SignalHandler():
         self.decoder.stop()
         self.bridge.destroy()
         self.netfilter.reset()
+        os.system("mv /etc/resolv.conf.orig /etc/resolv.conf")
         sys.exit(0)
 
     @staticmethod
@@ -471,6 +472,7 @@ class Netfilter:
         os.system("while ip route del default; do :; done 2>/dev/null")
         os.system("ip route add default via 169.254.66.55 dev mibr")
         if self.subnet.dnsip:
+            os.system("mv /etc/resolv.conf /etc/resolv.conf.orig")
             os.system("echo nameserver %s >/etc/resolv.conf" % self.subnet.dnsip)
         print """
 ************************************************************************
