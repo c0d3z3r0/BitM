@@ -13,8 +13,7 @@ It can be used on a beaglebone/raspberry pi/... or on any laptop with two ethern
 
 ### Software
 * Libs and tools: libpcap, bridge-utils, ebtables, iptables, arptables, macchanger
-* Python2 with argparse, pcapy
-* Improved impacket from https://github.com/c0d3z3r0/impacket
+* Python2 with pcapy, argparse and impacket
 
 ## Installation
 
@@ -22,9 +21,9 @@ It can be used on a beaglebone/raspberry pi/... or on any laptop with two ethern
 aptitude install libpcap bridge-utils ebtables iptables arptables macchanger
 pip install virtualenv
 
-virtualenv venv
+virtualenv -p python2 venv
 . venv/bin/activate
-pip install argparse pcapy git+https://github.com/c0d3z3r0/impacket.git
+pip install pcapy impacket
 deactivate
 ~~~
 
