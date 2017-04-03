@@ -23,7 +23,8 @@ pip install virtualenv
 
 virtualenv -p python2 venv
 . venv/bin/activate
-pip install pcapy impacket
+pip install pcapy
+pip install git+https://github.com/CoreSecurity/impacket.git
 deactivate
 ~~~
 

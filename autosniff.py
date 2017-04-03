@@ -15,11 +15,15 @@ import socket
 
 import pcapy
 from pcapy import open_live
-import impacket
-import impacket.eap
-import impacket.dhcp
-import impacket.ImpactPacket
-from impacket.ImpactDecoder import EthDecoder, LinuxSLLDecoder
+try:
+    import impacket
+    import impacket.eap
+    import impacket.dhcp
+    import impacket.ImpactPacket
+    from impacket.ImpactDecoder import EthDecoder, LinuxSLLDecoder, BootpDecoder, DHCPDecoder
+except:
+    print "You need to install impacket (currently you need to install the dev version from Github)."
+    sys.exit(1)
 
 
 def cmd(c):
@@ -201,27 +205,28 @@ class DecoderThread(Thread):
             ip = e.child()
             if isinstance(ip.child(), impacket.ImpactPacket.UDP):
                 udp = ip.child()
-                if 'DHCP' in self.protocols and \
-                   isinstance(udp.child(), impacket.dhcp.BootpPacket):
-                    bootp = udp.child()
-                    if isinstance(bootp.child(), impacket.dhcp.DhcpPacket):
-                        dhcp = bootp.child()
-                        if dhcp.getOptionValue('message-type') == dhcp.DHCPDISCOVER:
-                            self.subnet.clientmac = e.get_ether_shost()
-                        elif dhcp.getOptionValue('message-type') == dhcp.DHCPREQUEST:
-                            self.subnet.clientmac = e.get_ether_shost()
-                        elif dhcp.getOptionValue('message-type') == dhcp.DHCPACK or \
-                                dhcp.getOptionValue('message-type') == dhcp.DHCPOFFER:
-                            if not self.subnet.clientip:
-                                self.subnet.clientip = self.subnet.int2ip(bootp["yiaddr"])
-                            self.subnet.gatewayip = self.subnet.int2ip(dhcp.getOptionValue("router")[0])
-                            self.subnet.gatewaymac = e.get_ether_shost()
-                            self.subnet.subnetmask = self.subnet.ip2array(
-                                self.subnet.int2ip(dhcp.getOptionValue("subnet-mask")))
-                            self.subnet.subnet = self.subnet.ip2array(self.subnet.int2ip(
-                                dhcp.getOptionValue("subnet-mask") & bootp["yiaddr"]))
-                            self.subnet.dnsip = self.subnet.int2ip(dhcp.getOptionValue("domain-name-server")[0])
-                            self.subnet.dhcp = True
+                if 'DHCP' in self.protocols:
+                    if udp.get_uh_dport() in (67, 68) and udp.get_uh_sport() in (67, 68):
+                        bootp_decoder = BootpDecoder()
+                        bootp = bootp_decoder.decode(udp.child().get_packet())
+                        if isinstance(bootp.child(), impacket.dhcp.DhcpPacket):
+                            dhcp = bootp.child()
+                            if dhcp.getOptionValue('message-type') == dhcp.DHCPDISCOVER:
+                                self.subnet.clientmac = e.get_ether_shost()
+                            elif dhcp.getOptionValue('message-type') == dhcp.DHCPREQUEST:
+                                self.subnet.clientmac = e.get_ether_shost()
+                            elif dhcp.getOptionValue('message-type') == dhcp.DHCPACK or \
+                                    dhcp.getOptionValue('message-type') == dhcp.DHCPOFFER:
+                                if not self.subnet.clientip:
+                                    self.subnet.clientip = self.subnet.int2ip(bootp["yiaddr"])
+                                self.subnet.gatewayip = self.subnet.int2ip(dhcp.getOptionValue("router")[0])
+                                self.subnet.gatewaymac = e.get_ether_shost()
+                                self.subnet.subnetmask = self.subnet.ip2array(
+                                    self.subnet.int2ip(dhcp.getOptionValue("subnet-mask")))
+                                self.subnet.subnet = self.subnet.ip2array(self.subnet.int2ip(
+                                    dhcp.getOptionValue("subnet-mask") & bootp["yiaddr"]))
+                                self.subnet.dnsip = self.subnet.int2ip(dhcp.getOptionValue("domain-name-server")[0])
+                                self.subnet.dhcp = True
 
             elif isinstance(ip.child(), impacket.ImpactPacket.TCP):
                 tcp = ip.child()
