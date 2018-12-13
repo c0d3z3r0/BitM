@@ -15,16 +15,11 @@ import socket
 
 import pcapy
 from pcapy import open_live
-try:
-    import impacket
-    import impacket.eap
-    import impacket.dhcp
-    import impacket.ImpactPacket
-    from impacket.ImpactDecoder import EthDecoder, LinuxSLLDecoder, BootpDecoder, DHCPDecoder
-except:
-    print "You need to install impacket (currently you need to install the dev version from Github)."
-    sys.exit(1)
-
+import impacket
+import impacket.eap
+import impacket.dhcp
+import impacket.ImpactPacket
+from impacket.ImpactDecoder import EthDecoder, LinuxSLLDecoder, BootpDecoder, DHCPDecoder
 
 def cmd(c):
     try:
