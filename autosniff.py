@@ -347,15 +347,15 @@ class Subnet:
     def get_gatewaymac(self):
         ethernet = impacket.ImpactPacket.Ethernet()
         temp = ethernet.as_eth_addr(self.gatewaymac)
-        return re.sub(r':(\d):', r':0\1:', temp)
+        return re.sub(r':(\w):', r':0\1:', temp)
 
     def get_clientmac(self):
         ethernet = impacket.ImpactPacket.Ethernet()
         temp = ethernet.as_eth_addr(self.clientmac)
-        return re.sub(r':(\d):', r':0\1:', temp)
+        return re.sub(r':(\w):', r':0\1:', temp)
 
     def __str__(self):
-        header = "Network config: \n"
+        header = "\nNetwork config: \n"
         output = ""
 
         output += "dhcp seen: %s\n" % str(self.dhcp)
